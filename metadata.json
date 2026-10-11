@@ -1,0 +1,6 @@
+{
+  "name": "My Messiah School of Cavite Library Management System",
+  "description": "Official Library Management System for My Messiah School of Cavite, Inc. – Delas Alas Campus Senior High School students and library faculty.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
