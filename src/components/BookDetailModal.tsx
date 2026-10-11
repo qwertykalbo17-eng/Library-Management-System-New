@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Book } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { db, SYSTEM_CURRENT_DATE } from '../db/libraryDatabase';
@@ -36,6 +36,28 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({
   const [borrowingSuccess, setBorrowingSuccess] = useState<string | null>(null);
   const [notes, setNotes] = useState('Senior High School research checkout');
 
+    const [borrowing, setBorrowing] = useState(false);
+  const [studentHasActiveBorrow, setStudentHasActiveBorrow] = useState(false);
+
+  // Check whether this student already has an active copy of the book
+  useEffect(() => {
+    let active = true;
+    if (!isOpen || !book || !currentStudent) {
+      setStudentHasActiveBorrow(false);
+      return;
+    }
+    db.getTransactionsForStudent(currentStudent.student_id)
+      .then((txns) => {
+        if (active) {
+          setStudentHasActiveBorrow(txns.some((t) => t.book_id === book.book_id && t.return_date === null));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [isOpen, book?.book_id, currentStudent?.student_id]);
+
   if (!isOpen || !book) return null;
 
   // Calculate 7-day due date
@@ -56,18 +78,15 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({
   const isAvailable = book.available_copies > 0;
   const isLimited = book.available_copies > 0 && book.available_copies <= 2;
 
-  // Check if current student already has this book borrowed
-  const studentHasActiveBorrow =
-    currentStudent &&
-    db
-      .getTransactionsForStudent(currentStudent.student_id)
-      .some((t) => t.book_id === book.book_id && t.return_date === null);
 
-  const handleConfirmBorrow = () => {
-    if (!currentStudent) return;
+  const handleConfirmBorrow = async () => {
+    if (!currentStudent || borrowing) return;
     setBorrowingError(null);
+    setBorrowing(true);
 
-    const res = db.borrowBook(currentStudent.student_id, book.book_id, notes);
+    const res = await db.borrowBook(currentStudent.student_id, book.book_id, notes);
+    setBorrowing(false);
+
     if (!res.success) {
       setBorrowingError(res.message);
     } else {
@@ -269,11 +288,12 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({
                 >
                   Cancel
                 </button>
-                <button
+                                <button
                   onClick={handleConfirmBorrow}
-                  className="px-5 py-2 text-xs font-bold text-white bg-blue-900 hover:bg-blue-950 rounded-md transition-colors cursor-pointer shadow-xs"
+                  disabled={borrowing || !!borrowingSuccess}
+                  className="px-5 py-2 text-xs font-bold text-white bg-blue-900 hover:bg-blue-950 disabled:opacity-60 rounded-md transition-colors cursor-pointer shadow-xs"
                 >
-                  Confirm Borrowing
+                  {borrowing ? 'Processing…' : 'Confirm Borrowing'}
                 </button>
               </div>
             </div>

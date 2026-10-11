@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Book } from '../types';
+import { Book, Category } from '../types';
 import { db } from '../db/libraryDatabase';
 import {
   Search,
@@ -12,62 +12,43 @@ import {
   XCircle,
   RotateCcw,
 } from 'lucide-react';
-import { supabase } from '../supabaseClient';
 
 interface CatalogPageProps {
   onSelectBook: (book: Book) => void;
 }
 
 export const CatalogPage: React.FC<CatalogPageProps> = ({ onSelectBook }) => {
-  const [books, setBooks] = useState<Book[]>(() => db.getBooks());
-const [loadingBooks, setLoadingBooks] = useState(true);
-const [booksError, setBooksError] = useState('');
-  const categories = useMemo(() => db.getCategories(), []);
+  const [books, setBooks] = useState<Book[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loadingBooks, setLoadingBooks] = useState(true);
+  const [booksError, setBooksError] = useState('');
 
   useEffect(() => {
-  const loadBooks = async () => {
-    setLoadingBooks(true);
-    setBooksError('');
+    let active = true;
 
-    const { data, error } = await supabase
-      .from('library_books')
-      .select('*')
-      .order('title');
+    const loadCatalog = async () => {
+      try {
+        const [loadedBooks, loadedCategories] = await Promise.all([db.getBooks(), db.getCategories()]);
+        if (!active) return;
+        setBooks(loadedBooks);
+        setCategories(loadedCategories);
+        setBooksError('');
+      } catch (e) {
+        if (active) setBooksError(e instanceof Error ? e.message : 'Could not load the catalog.');
+      } finally {
+        if (active) setLoadingBooks(false);
+      }
+    };
 
-    if (error) {
-      console.error('Error loading Supabase books:', error.message);
-      setBooksError(error.message);
-      setLoadingBooks(false);
-      return;
-    }
-
-    const supabaseBooks: Book[] = (data ?? []).map((book) => ({
-      book_id: book.id,
-      title: book.title,
-      author: book.author,
-      isbn: book.isbn,
-      category: book.category,
-      publisher: book.publisher,
-      publication_year: book.publication_year,
-      description: book.description,
-      shelf_location: book.shelf_location,
-      total_copies: book.total_copies,
-      available_copies: book.available_copies,
-      cover_image: book.cover_image,
-      borrow_count: book.borrow_count,
-      created_at: book.created_at,
-    }));
-
-    if (supabaseBooks.length > 0) {
-  setBooks(supabaseBooks);
-} else {
-  setBooks(db.getBooks());
-}
-    setLoadingBooks(false);
-  };
-
-  loadBooks();
-}, []);
+    loadCatalog();
+    // Reload when a book is borrowed or returned so copy counts stay current
+    const onChange = () => loadCatalog();
+    window.addEventListener('library:changed', onChange);
+    return () => {
+      active = false;
+      window.removeEventListener('library:changed', onChange);
+    };
+  }, []);
 
   // Filter & Search states
   const [searchQuery, setSearchQuery] = useState('');
@@ -287,7 +268,15 @@ const [booksError, setBooksError] = useState('');
       </div>
 
       {/* Book Grid */}
-      {filteredBooks.length === 0 ? (
+      {loadingBooks ? (
+        <div className="bg-white rounded-xl border border-slate-200 p-12 text-center text-sm text-slate-500">
+          Loading catalog…
+        </div>
+      ) : booksError ? (
+        <div className="bg-red-50 rounded-xl border border-red-200 p-6 text-center text-sm text-red-700">
+          Could not load the catalog: {booksError}
+        </div>
+      ) : filteredBooks.length === 0 ? (
         <div className="bg-white rounded-xl border border-slate-200 p-12 text-center space-y-4">
           <div className="w-12 h-12 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto">
             <Search className="w-6 h-6" />

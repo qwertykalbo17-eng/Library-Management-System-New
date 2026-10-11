@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { BorrowingTransaction, Book } from '../types';
 import { db, SYSTEM_CURRENT_DATE } from '../db/libraryDatabase';
-import { X, CheckCircle2, RotateCcw, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { X, CheckCircle2, RotateCcw, AlertTriangle } from 'lucide-react';
 
 interface ReturnModalProps {
   transaction: BorrowingTransaction | null;
@@ -33,11 +33,12 @@ export const ReturnModal: React.FC<ReturnModalProps> = ({
 
   const isOverdue = transaction.status === 'Overdue';
 
-  const handleConfirmReturn = () => {
+  const handleConfirmReturn = async () => {
+    if (loading) return;
     setLoading(true);
     setErrorMessage(null);
 
-    const res = db.returnBook(transaction.transaction_id);
+    const res = await db.returnBook(transaction.transaction_id);
     if (!res.success) {
       setErrorMessage(res.message);
       setLoading(false);
@@ -156,7 +157,7 @@ export const ReturnModal: React.FC<ReturnModalProps> = ({
                   type="button"
                   disabled={loading}
                   onClick={handleConfirmReturn}
-                  className="px-5 py-2 text-xs font-bold text-white bg-blue-900 hover:bg-blue-950 rounded-md transition-colors cursor-pointer shadow-xs"
+                  className="px-5 py-2 text-xs font-bold text-white bg-blue-900 hover:bg-blue-950 disabled:opacity-60 rounded-md transition-colors cursor-pointer shadow-xs"
                 >
                   {loading ? 'Processing...' : 'Confirm Return'}
                 </button>

@@ -16,25 +16,31 @@ import {
 export const StudentProfilePage: React.FC = () => {
   const { currentStudent, refreshStudentData } = useAuth();
 
-  const [contactNumber, setContactNumber] = useState(
-    currentStudent?.contact_number || '0917-555-1042'
-  );
-  const [preferredEmail, setPreferredEmail] = useState(currentStudent?.email || '');
+  const [contactNumber, setContactNumber] = useState(currentStudent?.contact_number || '');
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   if (!currentStudent) return null;
 
-  const handleSavePreferences = (e: React.FormEvent) => {
+  const handleSavePreferences = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentStudent) return;
 
-    db.updateStudent({
+    setSaving(true);
+    setSaveError(null);
+    const res = await db.updateStudent({
       ...currentStudent,
-      contact_number: contactNumber,
-      email: preferredEmail,
+      contact_number: contactNumber.trim(),
     });
+    setSaving(false);
 
-    refreshStudentData();
+    if (!res.success) {
+      setSaveError(res.error || 'Could not save your changes. Please try again.');
+      return;
+    }
+
+    await refreshStudentData();
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);
   };
@@ -132,25 +138,11 @@ export const StudentProfilePage: React.FC = () => {
             </div>
 
             <div className="space-y-4 text-xs sm:text-sm">
-              {/* Institutional Email */}
-              <div>
-                <label className="font-bold text-slate-700 block mb-1 text-xs">
-                  Institutional Notification Email
-                </label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="email"
-                    value={preferredEmail}
-                    onChange={(e) => setPreferredEmail(e.target.value)}
-                    required
-                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-900"
-                  />
+              {saveError && (
+                <div className="p-2.5 bg-red-50 text-red-700 rounded border border-red-200 text-xs">
+                  {saveError}
                 </div>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Used for automated loan confirmations, due date reminders, and campus library notices.
-                </p>
-              </div>
+              )}
 
               {/* Contact Number */}
               <div>
@@ -213,10 +205,11 @@ export const StudentProfilePage: React.FC = () => {
               <div className="pt-4 flex justify-end">
                 <button
                   type="submit"
-                  className="px-5 py-2 text-xs font-bold text-white bg-blue-900 hover:bg-blue-950 rounded-lg transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  disabled={saving}
+                  className="px-5 py-2 text-xs font-bold text-white bg-blue-900 hover:bg-blue-950 disabled:opacity-60 rounded-lg transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
                 >
                   <Save className="w-3.5 h-3.5" />
-                  <span>Save Contact Preferences</span>
+                  <span>{saving ? 'Saving…' : 'Save Contact Preferences'}</span>
                 </button>
               </div>
             </div>

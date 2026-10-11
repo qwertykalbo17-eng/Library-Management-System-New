@@ -61,10 +61,15 @@ function MainApp() {
   }, [role]);
 
   // Handlers
-  const handleSelectBook = (book: Book) => {
-    // Fetch latest fresh data for this book
-    const freshBook = db.getBook(book.book_id) || book;
-    setSelectedBook(freshBook);
+    const handleSelectBook = async (book: Book) => {
+    // Show the book right away, then update it with the latest copy counts
+    setSelectedBook(book);
+    try {
+      const freshBook = await db.getBook(book.book_id);
+      if (freshBook) setSelectedBook(freshBook);
+    } catch {
+      // keep the book we already have
+    }
   };
 
   const handleInitiateReturn = (txn: BorrowingTransaction, book: Book) => {

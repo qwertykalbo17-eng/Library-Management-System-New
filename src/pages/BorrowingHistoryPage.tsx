@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../db/libraryDatabase';
+import { useLibraryData } from '../db/useLibraryData';
+import { Book, BorrowingTransaction } from '../types';
 import {
   Calendar,
   Search,
@@ -20,12 +22,21 @@ export const BorrowingHistoryPage: React.FC<BorrowingHistoryPageProps> = ({ onNa
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'Returned' | 'Borrowed' | 'Overdue'>('all');
 
-  const transactions = useMemo(() => {
-    if (!currentStudent) return [];
-    return db.getTransactionsForStudent(currentStudent.student_id);
-  }, [currentStudent]);
+  const { data, loading, error } = useLibraryData(
+    async () => {
+      if (!currentStudent) return { transactions: [] as BorrowingTransaction[], books: [] as Book[] };
+      const [transactions, books] = await Promise.all([
+        db.getTransactionsForStudent(currentStudent.student_id),
+        db.getBooks(),
+      ]);
+      return { transactions, books };
+    },
+    [currentStudent?.student_id],
+    { transactions: [] as BorrowingTransaction[], books: [] as Book[] }
+  );
 
-  const allBooks = useMemo(() => db.getBooks(), []);
+  const transactions = data.transactions;
+  const allBooks = data.books;
 
   const filtered = useMemo(() => {
     return transactions.filter((txn) => {
@@ -55,6 +66,13 @@ export const BorrowingHistoryPage: React.FC<BorrowingHistoryPageProps> = ({ onNa
   }, [transactions, allBooks, searchQuery, statusFilter]);
 
   if (!currentStudent) return null;
+
+  if (loading) {
+    return <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 text-sm text-slate-500">Loading your borrowing history…</div>;
+  }
+  if (error) {
+    return <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 text-sm text-red-700">Could not load your history: {error}</div>;
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 space-y-8">

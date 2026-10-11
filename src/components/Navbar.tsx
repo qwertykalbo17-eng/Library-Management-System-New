@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../db/libraryDatabase';
+import { LIBRARY_CHANGED } from '../db/useLibraryData';
 import { NotificationItem } from '../types';
 import { MMSCLogo } from './MMSCLogo';
 import {
@@ -34,13 +35,30 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const notifRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (role === 'student' && currentStudent) {
-      setNotifications(db.getNotifications(currentStudent.student_id));
-    } else {
+    useEffect(() => {
+    if (role !== 'student' || !currentStudent) {
       setNotifications([]);
+      return;
     }
-  }, [role, currentStudent, currentTab]);
+
+    let active = true;
+    const load = async () => {
+      try {
+        const list = await db.getNotifications(currentStudent.student_id);
+        if (active) setNotifications(list);
+      } catch {
+        // keep the notifications we already have
+      }
+    };
+
+    load();
+    // Refresh the bell after any borrow, return or edit
+    window.addEventListener(LIBRARY_CHANGED, load);
+    return () => {
+      active = false;
+      window.removeEventListener(LIBRARY_CHANGED, load);
+    };
+  }, [role, currentStudent?.student_id, currentTab]);
 
   // Click outside listener for notification popover
   useEffect(() => {
@@ -55,17 +73,19 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
-  const handleMarkAsRead = (notifId: string) => {
-    db.markNotificationAsRead(notifId);
-    if (currentStudent) {
-      setNotifications(db.getNotifications(currentStudent.student_id));
+  const handleMarkAsRead = async (notifId: string) => {
+    try {
+      await db.markNotificationAsRead(notifId); // the bell reloads itself afterwards
+    } catch {
+      // ignore: the notification stays unread
     }
   };
 
-  const handleMarkAllRead = () => {
-    if (currentStudent) {
-      db.markAllNotificationsAsRead(currentStudent.student_id);
-      setNotifications(db.getNotifications(currentStudent.student_id));
+  const handleMarkAllRead = async () => {
+    try {
+      await db.markAllNotificationsAsRead();
+    } catch {
+      // ignore
     }
   };
 

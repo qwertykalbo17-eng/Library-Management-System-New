@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db, SYSTEM_CURRENT_DATE } from '../db/libraryDatabase';
+import { useLibraryData } from '../db/useLibraryData';
 import { Book, BorrowingTransaction } from '../types';
 import {
   BookOpen,
@@ -30,17 +31,31 @@ export const StudentDashboardPage: React.FC<StudentDashboardPageProps> = ({
 }) => {
   const { currentStudent } = useAuth();
 
+  const { data, loading, error } = useLibraryData(
+    async () => {
+      if (!currentStudent) return { transactions: [] as BorrowingTransaction[], books: [] as Book[] };
+      const [transactions, books] = await Promise.all([
+        db.getTransactionsForStudent(currentStudent.student_id),
+        db.getBooks(),
+      ]);
+      return { transactions, books };
+    },
+    [currentStudent?.student_id],
+    { transactions: [] as BorrowingTransaction[], books: [] as Book[] }
+  );
+
   if (!currentStudent) return null;
 
-  const metrics = useMemo(() => {
-    return db.getStudentMetrics(currentStudent.student_id);
-  }, [currentStudent]);
+  if (loading) {
+    return <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 text-sm text-slate-500">Loading your library records…</div>;
+  }
+  if (error) {
+    return <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 text-sm text-red-700">Could not load your records: {error}</div>;
+  }
 
-  const transactions = useMemo(() => {
-    return db.getTransactionsForStudent(currentStudent.student_id);
-  }, [currentStudent]);
-
-  const allBooks = useMemo(() => db.getBooks(), []);
+  const transactions = data.transactions;
+  const allBooks = data.books;
+  const metrics = db.computeStudentMetrics(transactions);
 
   // Currently active borrowed transactions
   const activeTransactions = transactions.filter((t) => t.return_date === null);
