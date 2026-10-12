@@ -1,6 +1,7 @@
 import React from 'react';
 import { BookOpen, Search, ArrowRight, ShieldCheck, Zap, HeartHandshake, CheckCircle2, BookMarked, Users, Sparkles, Clock, MapPin } from 'lucide-react';
-import { INITIAL_BOOKS } from '../db/initialData';
+import { db } from '../db/libraryDatabase';
+import { useLibraryData } from '../db/useLibraryData';
 import { Book } from '../types';
 import { MMSCLogo } from '../components/MMSCLogo';
 
@@ -15,7 +16,16 @@ export const HomePage: React.FC<HomePageProps> = ({
   onSelectBook,
   onOpenResearchModal,
 }) => {
-  const featuredBooks = INITIAL_BOOKS.slice(0, 3);
+  const { data: allBooks, loading } = useLibraryData(
+    () => db.getBooks(),
+    [],
+    [] as Book[]
+  );
+
+  // Show the 3 most borrowed books. If none have been borrowed yet, they appear alphabetically.
+  const featuredBooks = [...allBooks]
+    .sort((a, b) => b.borrow_count - a.borrow_count || a.title.localeCompare(b.title))
+    .slice(0, 3);
 
   return (
     <div className="space-y-16 pb-16">
@@ -183,12 +193,15 @@ export const HomePage: React.FC<HomePageProps> = ({
             onClick={() => onNavigate('catalog')}
             className="text-xs font-bold text-blue-900 hover:text-blue-950 flex items-center gap-1.5 cursor-pointer group"
           >
-            <span>View Complete Catalog ({INITIAL_BOOKS.length} Titles)</span>
+            <span>View Complete Catalog ({allBooks.length} Titles)</span>
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {loading && (
+            <p className="text-sm text-slate-500 col-span-3">Loading featured resources…</p>
+          )}
           {featuredBooks.map((book) => (
             <div
               key={book.book_id}
@@ -230,7 +243,7 @@ export const HomePage: React.FC<HomePageProps> = ({
 
               <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
                 <span className="text-[11px] text-slate-500 font-mono">
-                  ISBN: {book.isbn.slice(-8)}
+                  ISBN: {book.isbn ? book.isbn.slice(-8) : 'N/A'}
                 </span>
                 <button
                   onClick={() => onSelectBook(book)}
