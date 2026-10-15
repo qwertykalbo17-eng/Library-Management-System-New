@@ -91,6 +91,32 @@ const mapNotification = (r: Row, usernames: Map<string, string>): NotificationIt
   created_at: r.created_at,
 });
 
+/** A student's "Borrow" click. It stays Pending until the librarian approves or declines it. */
+export interface BorrowRequest {
+  request_id: string;
+  student_id: string;
+  book_id: string;
+  status: 'Pending' | 'Approved' | 'Rejected' | 'Cancelled';
+  notes?: string;
+  requested_at: string;
+  decided_at?: string;
+  decision_note?: string;
+}
+
+const reqLabel = (n: number) => `REQ-${String(n).padStart(5, '0')}`;
+const reqNumber = (id: string) => Number(id.replace(/\D/g, ''));
+
+const mapRequest = (r: Row, usernames: Map<string, string>): BorrowRequest => ({
+  request_id: reqLabel(r.req_no),
+  student_id: usernames.get(r.student_id) ?? r.student_id,
+  book_id: r.book_id,
+  status: r.status,
+  notes: r.notes ?? undefined,
+  requested_at: r.requested_at,
+  decided_at: r.decided_at ?? undefined,
+  decision_note: r.decision_note ?? undefined,
+});
+
 const check = (error: { message: string } | null) => {
   if (error) throw new Error(error.message);
 };
@@ -258,11 +284,15 @@ class LibraryDatabase {
     return all.filter((t) => t.student_id === username);
   }
 
+  /**
+   * Students: creates a PENDING request (res.pending === true). The librarian must approve it.
+   * Librarians (walk-in desk): the loan is created right away and res.transaction is filled in.
+   */
   public async borrowBook(
     studentUsername: string,
     bookId: string,
     notes: string = 'Senior High School student checkout'
-  ): Promise<{ success: boolean; transaction?: BorrowingTransaction; message: string }> {
+  ): Promise<{ success: boolean; pending?: boolean; transaction?: BorrowingTransaction; message: string }> {
     const student = await this.getStudent(studentUsername);
     if (!student) return { success: false, message: 'Student account not found in library records.' };
 
@@ -281,9 +311,14 @@ class LibraryDatabase {
     if (error) return { success: false, message: error.message };
 
     const res = data as Row;
-    if (!res?.success) return { success: false, message: res?.message ?? 'Could not complete the checkout.' };
+    if (!res?.success) return { success: false, message: res?.message ?? 'Could not complete the request.' };
 
     this.notify();
+
+    if (res.pending) {
+      return { success: true, pending: true, message: res.message };
+    }
+
     return {
       success: true,
       message: res.message,
@@ -298,6 +333,49 @@ class LibraryDatabase {
         notes,
       },
     };
+  }
+
+  // --- BORROW REQUESTS (librarian approval) ---
+  /** Librarians get every request; a student only gets their own. */
+  public async getBorrowRequests(): Promise<BorrowRequest[]> {
+    const [{ data, error }, names] = await Promise.all([
+      supabase.from('borrow_requests').select('*').order('requested_at', { ascending: false }),
+      this.usernameMap(),
+    ]);
+    check(error);
+    return (data ?? []).map((r: Row) => mapRequest(r, names));
+  }
+
+  public async getBorrowRequestsForStudent(username: string): Promise<BorrowRequest[]> {
+    const all = await this.getBorrowRequests();
+    return all.filter((r) => r.student_id === username);
+  }
+
+  public async approveBorrow(requestId: string): Promise<{ success: boolean; message: string }> {
+    const { data, error } = await supabase.rpc('approve_borrow', { p_req_no: reqNumber(requestId) });
+    if (error) return { success: false, message: error.message };
+    const res = data as Row;
+    this.notify();
+    return { success: !!res?.success, message: res?.message ?? 'Could not approve the request.' };
+  }
+
+  public async rejectBorrow(requestId: string, reason?: string): Promise<{ success: boolean; message: string }> {
+    const { data, error } = await supabase.rpc('reject_borrow', {
+      p_req_no: reqNumber(requestId),
+      p_reason: reason?.trim() || null,
+    });
+    if (error) return { success: false, message: error.message };
+    const res = data as Row;
+    this.notify();
+    return { success: !!res?.success, message: res?.message ?? 'Could not decline the request.' };
+  }
+
+  public async cancelBorrowRequest(requestId: string): Promise<{ success: boolean; message: string }> {
+    const { data, error } = await supabase.rpc('cancel_borrow_request', { p_req_no: reqNumber(requestId) });
+    if (error) return { success: false, message: error.message };
+    const res = data as Row;
+    this.notify();
+    return { success: !!res?.success, message: res?.message ?? 'Could not cancel the request.' };
   }
 
   public async returnBook(

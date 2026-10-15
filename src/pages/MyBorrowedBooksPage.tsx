@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { db, SYSTEM_CURRENT_DATE } from '../db/libraryDatabase';
+import { db, SYSTEM_CURRENT_DATE, BorrowRequest } from '../db/libraryDatabase';
+import { PendingRequestsPanel } from './PendingRequestsPanel';
 import { useLibraryData } from '../db/useLibraryData';
 import { readMyBooksFilter, clearMyBooksFilter, MyBooksFilter } from '../db/pageFilter';
 import { Book, BorrowingTransaction } from '../types';
@@ -32,15 +33,26 @@ export const MyBorrowedBooksPage: React.FC<MyBorrowedBooksPageProps> = ({
 
   const { data, loading, error } = useLibraryData(
     async () => {
-      if (!currentStudent) return { transactions: [] as BorrowingTransaction[], books: [] as Book[] };
-      const [transactions, books] = await Promise.all([
+      if (!currentStudent) {
+        return {
+          transactions: [] as BorrowingTransaction[],
+          books: [] as Book[],
+          requests: [] as BorrowRequest[],
+        };
+      }
+      const [transactions, books, requests] = await Promise.all([
         db.getTransactionsForStudent(currentStudent.student_id),
         db.getBooks(),
+        db.getBorrowRequestsForStudent(currentStudent.student_id),
       ]);
-      return { transactions, books };
+      return { transactions, books, requests };
     },
     [currentStudent?.student_id],
-    { transactions: [] as BorrowingTransaction[], books: [] as Book[] }
+    {
+      transactions: [] as BorrowingTransaction[],
+      books: [] as Book[],
+      requests: [] as BorrowRequest[],
+    }
   );
 
   if (!currentStudent) return null;
@@ -98,6 +110,8 @@ export const MyBorrowedBooksPage: React.FC<MyBorrowedBooksPageProps> = ({
           <span>Browse More Books</span>
         </button>
       </div>
+
+            <PendingRequestsPanel requests={data.requests} books={allBooks} />
 
       {activeTransactions.length === 0 ? (
         <div className="bg-white rounded-xl border border-slate-200 p-12 text-center space-y-4">
