@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { db, SYSTEM_CURRENT_DATE } from '../db/libraryDatabase';
+import { db, SYSTEM_CURRENT_DATE, BorrowRequest } from '../db/libraryDatabase';
+import { AdminBorrowRequestsPanel } from './AdminBorrowRequestsPanel';
 import { useLibraryData } from '../db/useLibraryData';
 import { Book, Student, BorrowingTransaction, Category } from '../types';
 import {
   BookOpen,
+  Users,
   Clock,
   AlertTriangle,
   CheckCircle2,
   Plus,
   Search,
+  Filter,
   Trash2,
   Edit,
   RotateCcw,
@@ -20,47 +23,55 @@ import {
   TrendingUp,
   X,
   Layers,
+  Save,
+  Check,
 } from 'lucide-react';
 
 interface AdminDashboardPageProps {
   onNavigate: (tab: string) => void;
 }
 
-type AdminData = {
-  books: Book[];
-  students: Student[];
-  transactions: BorrowingTransaction[];
-  categories: Category[];
+const EMPTY_ADMIN_DATA = {
+  books: [] as Book[],
+  students: [] as Student[],
+  transactions: [] as BorrowingTransaction[],
+  categories: [] as Category[],
+  requests: [] as BorrowRequest[],
+  metrics: db.computeDashboardMetrics([], [], []),
 };
-
-const EMPTY_DATA: AdminData = { books: [], students: [], transactions: [], categories: [] };
 
 export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNavigate }) => {
   const { role, adminName } = useAuth();
 
   // Tab navigation inside Admin Console
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'books' | 'students' | 'circulation' | 'reports' | 'settings'
+    'overview' | 'books' | 'students' | 'requests' | 'circulation' | 'reports' | 'settings'
   >('overview');
 
-  // Data from Supabase (reloads automatically after every change)
-  const { data, loading, error } = useLibraryData<AdminData>(
+  // Data loading (everything the console needs, loaded together from Supabase)
+  const {
+    data: adminData,
+    loading: dataLoading,
+    error: dataError,
+    reload: triggerRefresh,
+  } = useLibraryData(
     async () => {
-      if (role !== 'admin') return EMPTY_DATA;
-      const [books, students, transactions, categories] = await Promise.all([
+      if (role !== 'admin') return EMPTY_ADMIN_DATA;
+      const [books, students, transactions, categories, requests] = await Promise.all([
         db.getBooks(),
         db.getStudents(),
         db.getTransactions(),
         db.getCategories(),
+        db.getBorrowRequests(),
       ]);
-      return { books, students, transactions, categories };
+      const metrics = db.computeDashboardMetrics(books, students, transactions);
+      return { books, students, transactions, categories, requests, metrics };
     },
     [role],
-    EMPTY_DATA
+    EMPTY_ADMIN_DATA
   );
-
-  const { books, students, transactions, categories } = data;
-  const metrics = db.computeDashboardMetrics(books, students, transactions);
+  const { books, students, transactions, categories, requests, metrics } = adminData;
+  const pendingRequestCount = requests.filter((r) => r.status === 'Pending').length;
 
   // Book search & modal states
   const [bookSearch, setBookSearch] = useState('');
@@ -68,7 +79,6 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
   const [bookModalOpen, setBookModalOpen] = useState(false);
   const [editingBook, setEditingBook] = useState<Book | null>(null);
   const [bookFormError, setBookFormError] = useState<string | null>(null);
-  const [savingBook, setSavingBook] = useState(false);
 
   // Student search & modal states
   const [studentSearch, setStudentSearch] = useState('');
@@ -76,7 +86,6 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
   const [studentModalOpen, setStudentModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [studentFormError, setStudentFormError] = useState<string | null>(null);
-  const [savingStudent, setSavingStudent] = useState(false);
 
   // Circulation filter states & Walk-in Checkout modal
   const [txnSearch, setTxnSearch] = useState('');
@@ -86,7 +95,6 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
   const [walkinBookId, setWalkinBookId] = useState('');
   const [walkinError, setWalkinError] = useState<string | null>(null);
   const [walkinSuccess, setWalkinSuccess] = useState<string | null>(null);
-  const [walkinBusy, setWalkinBusy] = useState(false);
 
   // Action status notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -114,21 +122,6 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
     );
   }
 
-  if (loading) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 text-sm text-slate-500">
-        Loading library records…
-      </div>
-    );
-  }
-  if (error) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 text-sm text-red-700">
-        Could not load library records: {error}
-      </div>
-    );
-  }
-
   // --- Handlers: Book Management ---
   const handleOpenAddBook = () => {
     setEditingBook(null);
@@ -143,30 +136,32 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
   };
 
   const handleDeleteBook = async (bookId: string) => {
-    if (!window.confirm('Are you sure you want to delete this book from the catalog?')) return;
-    const res = await db.deleteBook(bookId);
-    if (!res.success) {
-      alert(res.message);
-    } else {
-      showToast(res.message);
+    if (window.confirm('Are you sure you want to delete this book from the catalog?')) {
+      const res = await db.deleteBook(bookId);
+      if (!res.success) {
+        alert(res.message);
+      } else {
+        showToast(res.message);
+        triggerRefresh();
+      }
     }
   };
 
   const handleSaveBook = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    const title = (formData.get('title') as string).trim();
-    const author = (formData.get('author') as string).trim();
-    const isbn = (formData.get('isbn') as string).trim();
+    const title = formData.get('title') as string;
+    const author = formData.get('author') as string;
+    const isbn = formData.get('isbn') as string;
     const category = formData.get('category') as string;
     const publisher = formData.get('publisher') as string;
     const publication_year = Number(formData.get('publication_year'));
     const description = formData.get('description') as string;
-    const shelf_location = (formData.get('shelf_location') as string).trim();
+    const shelf_location = formData.get('shelf_location') as string;
     const total_copies = Number(formData.get('total_copies'));
     const available_copies = Number(formData.get('available_copies'));
 
-    if (!title || !author || !isbn || !shelf_location) {
+    if (!title || !author || !shelf_location) {
       setBookFormError('Please fill in all required fields.');
       return;
     }
@@ -175,9 +170,6 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
       setBookFormError('Available copies cannot exceed total copies count.');
       return;
     }
-
-    setSavingBook(true);
-    setBookFormError(null);
 
     const res = editingBook
       ? await db.updateBook({
@@ -207,8 +199,6 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
           cover_image: '',
         });
 
-    setSavingBook(false);
-
     if (!res.success) {
       setBookFormError(res.message);
       return;
@@ -216,6 +206,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
 
     showToast(res.message);
     setBookModalOpen(false);
+    triggerRefresh();
   };
 
   // --- Handlers: Student Management ---
@@ -226,6 +217,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
       return;
     }
     showToast('Student account status updated.');
+    triggerRefresh();
   };
 
   const handleOpenEditStudent = (s: Student) => {
@@ -237,7 +229,6 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
   const handleSaveStudent = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!editingStudent) return;
-
     const formData = new FormData(e.currentTarget);
     const full_name = (formData.get('full_name') as string).trim();
     const grade_level = formData.get('grade_level') as 'Grade 11' | 'Grade 12';
@@ -250,8 +241,6 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
       return;
     }
 
-    setSavingStudent(true);
-    setStudentFormError(null);
     const res = await db.updateStudent({
       ...editingStudent,
       full_name,
@@ -260,15 +249,14 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
       section,
       contact_number,
     });
-    setSavingStudent(false);
-
     if (!res.success) {
-      setStudentFormError(res.error || 'Could not save the student record.');
+      setStudentFormError(res.error || 'Failed to update student.');
       return;
     }
-
     showToast('Student record updated successfully.');
+
     setStudentModalOpen(false);
+    triggerRefresh();
   };
 
   // --- Handlers: Circulation & Returns ---
@@ -278,15 +266,8 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
       alert(res.message);
     } else {
       showToast('Book return processed and inventory updated.');
+      triggerRefresh();
     }
-  };
-
-  const openWalkin = () => {
-    setWalkinStudentId('');
-    setWalkinBookId('');
-    setWalkinError(null);
-    setWalkinSuccess(null);
-    setWalkinModalOpen(true);
   };
 
   const handleWalkinCheckout = async (e: React.FormEvent) => {
@@ -295,14 +276,11 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
     setWalkinSuccess(null);
 
     if (!walkinStudentId.trim() || !walkinBookId.trim()) {
-      setWalkinError('Please select both a valid Student and Book.');
+      setWalkinError('Please select both a valid Student ID and Book ID.');
       return;
     }
 
-    setWalkinBusy(true);
     const res = await db.borrowBook(walkinStudentId.trim(), walkinBookId.trim(), 'Circulation Desk walk-in checkout');
-    setWalkinBusy(false);
-
     if (!res.success) {
       setWalkinError(res.message);
     } else {
@@ -311,6 +289,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
       setTimeout(() => {
         setWalkinModalOpen(false);
         setWalkinSuccess(null);
+        triggerRefresh();
       }, 1400);
     }
   };
@@ -402,13 +381,6 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
     return match;
   });
 
-  const tabClass = (tab: string) =>
-    `pb-3 px-3 transition-colors border-b-2 whitespace-nowrap cursor-pointer ${
-      activeTab === tab
-        ? 'border-blue-900 text-blue-900 font-bold'
-        : 'border-transparent hover:text-slate-900'
-    }`;
-
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 space-y-8">
       {/* Toast Alert */}
@@ -416,6 +388,17 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
         <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white text-xs px-4 py-3 rounded-lg shadow-xl border border-slate-700 flex items-center gap-2 animate-fade-in">
           <CheckCircle2 className="w-4 h-4 text-emerald-400" />
           <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {dataError && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+          Could not load library data: {dataError}
+        </div>
+      )}
+      {dataLoading && (
+        <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-500">
+          Loading library data…
         </div>
       )}
 
@@ -447,7 +430,13 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
             <span>Export Circulation</span>
           </button>
           <button
-            onClick={openWalkin}
+            onClick={() => {
+              setWalkinStudentId('');
+              setWalkinBookId('');
+              setWalkinError(null);
+              setWalkinSuccess(null);
+              setWalkinModalOpen(true);
+            }}
             className="px-4 py-2 text-xs font-bold text-white bg-blue-900 hover:bg-blue-950 rounded-lg transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -459,68 +448,173 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
       {/* Primary KPI Metrics Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 sm:gap-4">
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Total Titles</span>
-          <div className="text-2xl font-black text-slate-900 font-mono tabular-nums mt-1">{metrics.totalTitles}</div>
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+            Total Titles
+          </span>
+          <div className="text-2xl font-black text-slate-900 font-mono tabular-nums mt-1">
+            {metrics.totalTitles}
+          </div>
           <p className="text-[10px] text-slate-500">{metrics.totalCopies} total copies</p>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Available Books</span>
-          <div className="text-2xl font-black text-emerald-700 font-mono tabular-nums mt-1">{metrics.availableCopies}</div>
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+            Available Books
+          </span>
+          <div className="text-2xl font-black text-emerald-700 font-mono tabular-nums mt-1">
+            {metrics.availableCopies}
+          </div>
           <p className="text-[10px] text-slate-500">Ready for checkout</p>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Borrowed Books</span>
-          <div className="text-2xl font-black text-blue-900 font-mono tabular-nums mt-1">{metrics.activeBorrowedCount}</div>
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+            Borrowed Books
+          </span>
+          <div className="text-2xl font-black text-blue-900 font-mono tabular-nums mt-1">
+            {metrics.activeBorrowedCount}
+          </div>
           <p className="text-[10px] text-slate-500">Active student loans</p>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Overdue Books</span>
-          <div className="text-2xl font-black text-red-600 font-mono tabular-nums mt-1">{metrics.overdueCount}</div>
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+            Overdue Books
+          </span>
+          <div className="text-2xl font-black text-red-600 font-mono tabular-nums mt-1">
+            {metrics.overdueCount}
+          </div>
           <p className="text-[10px] text-slate-500">Requiring recall</p>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">SHS Students</span>
-          <div className="text-2xl font-black text-slate-900 font-mono tabular-nums mt-1">{metrics.registeredStudents}</div>
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+            SHS Students
+          </span>
+          <div className="text-2xl font-black text-slate-900 font-mono tabular-nums mt-1">
+            {metrics.registeredStudents}
+          </div>
           <p className="text-[10px] text-slate-500">Enrolled & registered</p>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Total Circulations</span>
-          <div className="text-2xl font-black text-slate-900 font-mono tabular-nums mt-1">{metrics.totalTransactions}</div>
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+            Total Circulations
+          </span>
+          <div className="text-2xl font-black text-slate-900 font-mono tabular-nums mt-1">
+            {metrics.totalTransactions}
+          </div>
           <p className="text-[10px] text-slate-500">{metrics.returnedCount} returned</p>
         </div>
       </div>
 
-      {/* Admin Internal Navigation Tabs */}
+      {/* Waiting borrow requests */}
+      {pendingRequestCount > 0 && (
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <h4 className="text-xs sm:text-sm font-bold text-amber-900">
+                {pendingRequestCount} borrow request{pendingRequestCount === 1 ? '' : 's'} waiting for approval
+              </h4>
+              <p className="text-xs text-amber-800 mt-0.5">
+                Students cannot pick up their books until you approve the request.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setActiveTab('requests')}
+            className="px-3 py-1.5 text-xs font-bold text-amber-900 bg-white border border-amber-200 hover:bg-amber-100 rounded-md transition-colors cursor-pointer shrink-0"
+          >
+            Review Requests
+          </button>
+        </div>
+      )}
+
+      {/* Admin Internal Navigation Tabs (Interactive Segmented Control) */}
       <div className="flex border-b border-slate-200 gap-2 overflow-x-auto text-xs font-semibold text-slate-600">
-        <button onClick={() => setActiveTab('overview')} className={tabClass('overview')}>
+        <button
+          onClick={() => setActiveTab('overview')}
+          className={`pb-3 px-3 transition-colors border-b-2 whitespace-nowrap cursor-pointer ${
+            activeTab === 'overview'
+              ? 'border-blue-900 text-blue-900 font-bold'
+              : 'border-transparent hover:text-slate-900'
+          }`}
+        >
           Research & Analytics Overview
         </button>
-        <button onClick={() => setActiveTab('books')} className={tabClass('books')}>
+        <button
+          onClick={() => setActiveTab('books')}
+          className={`pb-3 px-3 transition-colors border-b-2 whitespace-nowrap cursor-pointer ${
+            activeTab === 'books'
+              ? 'border-blue-900 text-blue-900 font-bold'
+              : 'border-transparent hover:text-slate-900'
+          }`}
+        >
           Book Management ({books.length})
         </button>
-        <button onClick={() => setActiveTab('students')} className={tabClass('students')}>
+        <button
+          onClick={() => setActiveTab('students')}
+          className={`pb-3 px-3 transition-colors border-b-2 whitespace-nowrap cursor-pointer ${
+            activeTab === 'students'
+              ? 'border-blue-900 text-blue-900 font-bold'
+              : 'border-transparent hover:text-slate-900'
+          }`}
+        >
           Student Accounts ({students.length})
         </button>
-        <button onClick={() => setActiveTab('circulation')} className={tabClass('circulation')}>
+        <button
+          onClick={() => setActiveTab('requests')}
+          className={`pb-3 px-3 transition-colors border-b-2 whitespace-nowrap cursor-pointer ${
+            activeTab === 'requests'
+              ? 'border-blue-900 text-blue-900 font-bold'
+              : 'border-transparent hover:text-slate-900'
+          }`}
+        >
+          Borrow Requests ({pendingRequestCount} pending)
+        </button>
+        <button
+          onClick={() => setActiveTab('circulation')}
+          className={`pb-3 px-3 transition-colors border-b-2 whitespace-nowrap cursor-pointer ${
+            activeTab === 'circulation'
+              ? 'border-blue-900 text-blue-900 font-bold'
+              : 'border-transparent hover:text-slate-900'
+          }`}
+        >
           Borrowing & Circulation Ledger ({transactions.length})
         </button>
-        <button onClick={() => setActiveTab('reports')} className={tabClass('reports')}>
+        <button
+          onClick={() => setActiveTab('reports')}
+          className={`pb-3 px-3 transition-colors border-b-2 whitespace-nowrap cursor-pointer ${
+            activeTab === 'reports'
+              ? 'border-blue-900 text-blue-900 font-bold'
+              : 'border-transparent hover:text-slate-900'
+          }`}
+        >
           Reports & Statistics
         </button>
-        <button onClick={() => setActiveTab('settings')} className={tabClass('settings')}>
+        <button
+          onClick={() => setActiveTab('settings')}
+          className={`pb-3 px-3 transition-colors border-b-2 whitespace-nowrap cursor-pointer ${
+            activeTab === 'settings'
+              ? 'border-blue-900 text-blue-900 font-bold'
+              : 'border-transparent hover:text-slate-900'
+          }`}
+        >
           System Tools
         </button>
       </div>
+
+      {/* --- BORROW REQUESTS (approve / decline) --- */}
+      {activeTab === 'requests' && (
+        <AdminBorrowRequestsPanel requests={requests} books={books} students={students} />
+      )}
 
       {/* --- TAB 1: OVERVIEW & RESEARCH ANALYTICS --- */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Strand Borrowing Distribution */}
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
@@ -533,9 +627,11 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
               </p>
 
               <div className="space-y-3 pt-2">
-                {Object.entries(metrics.strandDistribution).map(([strand, count]) => {
+                {Object.entries(metrics.strandDistribution).map(([strand, count]: [string, number]) => {
                   const percentage =
-                    metrics.totalTransactions > 0 ? Math.round((count / metrics.totalTransactions) * 100) : 0;
+                    metrics.totalTransactions > 0
+                      ? Math.round((count / metrics.totalTransactions) * 100)
+                      : 0;
 
                   return (
                     <div key={strand} className="space-y-1 text-xs">
@@ -557,6 +653,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
               </div>
             </div>
 
+            {/* Most Borrowed Resources */}
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
@@ -591,6 +688,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
             </div>
           </div>
 
+          {/* Research Alignment Notice */}
           <div className="bg-blue-50/60 border border-blue-200 rounded-xl p-5 text-xs text-slate-700 space-y-2">
             <span className="font-bold text-blue-950 uppercase tracking-wider block">
               Official Research Study Alignment
@@ -605,7 +703,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
         </div>
       )}
 
-      {/* --- TAB 2: BOOK MANAGEMENT --- */}
+            {/* --- TAB 2: BOOK MANAGEMENT --- */}
       {activeTab === 'books' && (
         <div className="space-y-4">
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -660,16 +758,16 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
                 <tbody className="divide-y divide-slate-100">
                   {filteredBooks.map((b) => (
                     <tr key={b.book_id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3 px-4 font-mono text-[11px] text-slate-500" title={b.book_id}>
-                        {b.book_id.slice(0, 8)}
-                      </td>
+                      <td className="py-3 px-4 font-mono text-[11px] text-slate-500">{b.book_id}</td>
                       <td className="py-3 px-4">
                         <span className="font-bold text-slate-900 block line-clamp-1">{b.title}</span>
                         <span className="text-slate-500 text-[11px] block">By {b.author}</span>
                       </td>
                       <td className="py-3 px-4 text-slate-700">{b.category}</td>
                       <td className="py-3 px-4 font-mono text-[11px] text-slate-500">{b.isbn}</td>
-                      <td className="py-3 px-4 font-mono font-semibold text-slate-700">{b.shelf_location}</td>
+                      <td className="py-3 px-4 font-mono font-semibold text-slate-700">
+                        {b.shelf_location}
+                      </td>
                       <td className="py-3 px-4 text-center">
                         <span
                           className={`font-mono font-bold tabular-nums ${
@@ -721,7 +819,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
                   type="text"
                   value={studentSearch}
                   onChange={(e) => setStudentSearch(e.target.value)}
-                  placeholder="Search student name, username, section..."
+                  placeholder="Search student name, ID, section..."
                   className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs"
                 />
               </div>
@@ -740,8 +838,8 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
               </select>
             </div>
 
-            <p className="text-[11px] text-slate-500 max-w-xs">
-              Students register themselves on the sign-up page. Activate their account here.
+            <p className="text-[11px] text-slate-500 w-full sm:w-auto sm:max-w-xs sm:text-right">
+              Students register themselves on the sign-up page. New accounts appear here as Inactive until you activate them.
             </p>
           </div>
 
@@ -750,11 +848,11 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider font-semibold">
                   <tr>
-                    <th className="py-3 px-4">Username</th>
+                    <th className="py-3 px-4">Student ID</th>
                     <th className="py-3 px-4">Full Name</th>
                     <th className="py-3 px-4">Grade & Strand</th>
                     <th className="py-3 px-4">Section</th>
-                    <th className="py-3 px-4">Contact</th>
+                    <th className="py-3 px-4">Username</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4 text-right">Action</th>
                   </tr>
@@ -762,7 +860,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
                 <tbody className="divide-y divide-slate-100">
                   {filteredStudents.map((s) => (
                     <tr key={s.student_id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3 px-4 font-mono font-bold text-blue-900 text-[11px]">{s.student_id}</td>
+                      <td className="py-3 px-4 font-mono font-bold text-blue-900 text-[11px]">
+                        {s.student_id}
+                      </td>
                       <td className="py-3 px-4">
                         <span className="font-bold text-slate-900">{s.full_name}</span>
                       </td>
@@ -770,9 +870,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
                         {s.grade_level} · <strong className="font-semibold">{s.strand}</strong>
                       </td>
                       <td className="py-3 px-4 text-slate-700">{s.section}</td>
-                      <td className="py-3 px-4 text-slate-500 text-[11px] truncate max-w-xs">
-                        {s.contact_number || '—'}
-                      </td>
+                      <td className="py-3 px-4 text-slate-500 text-[11px] truncate max-w-xs">{s.username}</td>
                       <td className="py-3 px-4">
                         <span
                           className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded border ${
@@ -784,26 +882,23 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
                           {s.account_status}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => handleOpenEditStudent(s)}
-                            className="p-1.5 text-blue-900 hover:bg-blue-50 rounded transition-colors"
-                            title="Edit Student Details"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleToggleStudent(s.student_id)}
-                            className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-colors cursor-pointer ${
-                              s.account_status === 'Active'
-                                ? 'bg-red-50 text-red-700 hover:bg-red-100'
-                                : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
-                            }`}
-                          >
-                            {s.account_status === 'Active' ? 'Deactivate' : 'Activate'}
-                          </button>
-                        </div>
+                      <td className="py-3 px-4 text-right space-x-1.5">
+                        <button
+                          onClick={() => handleOpenEditStudent(s)}
+                          className="px-2.5 py-1 rounded text-[11px] font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleToggleStudent(s.student_id)}
+                          className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-colors cursor-pointer ${
+                            s.account_status === 'Active'
+                              ? 'bg-red-50 text-red-700 hover:bg-red-100'
+                              : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                          }`}
+                        >
+                          {s.account_status === 'Active' ? 'Deactivate' : 'Activate'}
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -842,7 +937,13 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
             </div>
 
             <button
-              onClick={openWalkin}
+              onClick={() => {
+                setWalkinStudentId('');
+                setWalkinBookId('');
+                setWalkinError(null);
+                setWalkinSuccess(null);
+                setWalkinModalOpen(true);
+              }}
               className="w-full sm:w-auto px-4 py-2 text-xs font-bold text-white bg-blue-900 hover:bg-blue-950 rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -873,7 +974,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
 
                     return (
                       <tr key={t.transaction_id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-3 px-4 font-mono text-[11px] text-slate-500">{t.transaction_id}</td>
+                        <td className="py-3 px-4 font-mono text-[11px] text-slate-500">
+                          {t.transaction_id}
+                        </td>
                         <td className="py-3 px-4">
                           <span className="font-bold text-slate-900 block">{student?.full_name || 'Unknown'}</span>
                           <span className="text-slate-500 font-mono text-[11px]">{t.student_id}</span>
@@ -938,7 +1041,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
                 <FileSpreadsheet className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-900">Circulation & Transaction Ledger</h3>
+                <h3 className="text-base font-bold text-slate-900">
+                  Circulation & Transaction Ledger
+                </h3>
                 <p className="text-xs text-slate-500 mt-1">
                   Full dataset of historical student loans, due dates, return timestamps, and overdue flags for research empirical tabulation.
                 </p>
@@ -957,7 +1062,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
                 <Layers className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-900">Catalog Inventory & Stock Report</h3>
+                <h3 className="text-base font-bold text-slate-900">
+                  Catalog Inventory & Stock Report
+                </h3>
                 <p className="text-xs text-slate-500 mt-1">
                   Detailed inventory analysis showing ISBNs, call numbers, total vs available copy counts, and popularity metrics.
                 </p>
@@ -974,23 +1081,23 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
         </div>
       )}
 
-      {/* --- TAB 6: SYSTEM TOOLS --- */}
+      {/* --- TAB 6: SETTINGS & DATA RESET --- */}
       {activeTab === 'settings' && (
         <div className="bg-white p-6 sm:p-8 rounded-xl border border-slate-200 shadow-xs space-y-6 max-w-2xl">
           <div className="border-b border-slate-100 pb-4">
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
               <Settings className="w-5 h-5 text-blue-900" />
-              <span>System Diagnostics & Evaluation Tools</span>
+              <span>System Information</span>
             </h3>
-            <p className="text-xs text-slate-500 mt-1">Information about how this system stores its data.</p>
+            <p className="text-xs text-slate-500 mt-1">
+              Library records are stored in your Supabase database and shared by every computer that uses this system.
+            </p>
           </div>
 
-          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-950 space-y-2">
-            <span className="font-bold block">Live database connected</span>
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 space-y-2">
+            <span className="font-bold block">Data storage</span>
             <p className="leading-relaxed">
-              Books, students, borrowing records and notifications are now saved in the Supabase database. The old
-              “Restore Standard Default Data” button was removed because it would erase real library records. To
-              remove test data, delete it in the Supabase Table Editor.
+              Books, students, loans and notifications are saved online. The old "reset to sample data" tool was removed because it could erase real circulation records. To clear test data, use the Supabase Table Editor.
             </p>
           </div>
         </div>
@@ -1004,14 +1111,19 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
               <h3 className="font-bold text-sm text-white">
                 {editingBook ? 'Edit Book Details' : 'Add New Book Resource'}
               </h3>
-              <button onClick={() => setBookModalOpen(false)} className="p-1 text-slate-400 hover:text-white rounded">
+              <button
+                onClick={() => setBookModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-white rounded"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleSaveBook} className="p-5 space-y-4 text-xs">
               {bookFormError && (
-                <div className="p-2.5 bg-red-50 text-red-700 rounded border border-red-200">{bookFormError}</div>
+                <div className="p-2.5 bg-red-50 text-red-700 rounded border border-red-200">
+                  {bookFormError}
+                </div>
               )}
 
               <div>
@@ -1038,11 +1150,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">ISBN Number *</label>
+                  <label className="font-bold text-slate-700 block mb-1">ISBN Number (optional)</label>
                   <input
                     name="isbn"
                     defaultValue={editingBook?.isbn}
-                    required
                     placeholder="e.g. 978-971-06-4421-5"
                     className="w-full p-2 bg-slate-50 border border-slate-200 rounded text-slate-900 font-mono"
                   />
@@ -1051,7 +1162,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
                   <label className="font-bold text-slate-700 block mb-1">Category / Track *</label>
                   <select
                     name="category"
-                    defaultValue={editingBook?.category || categories[0]?.category_name || ''}
+                    defaultValue={editingBook?.category || 'STEM'}
                     className="w-full p-2 bg-slate-50 border border-slate-200 rounded text-slate-900"
                   >
                     {categories.map((c) => (
@@ -1098,9 +1209,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
                   <label className="font-bold text-slate-700 block mb-1">Total Copies</label>
                   <input
                     type="number"
-                    min="0"
+                    min="1"
                     name="total_copies"
-                    defaultValue={editingBook ? editingBook.total_copies : 5}
+                    defaultValue={editingBook?.total_copies || 5}
                     className="w-full p-2 bg-slate-50 border border-slate-200 rounded text-slate-900 font-mono"
                   />
                 </div>
@@ -1137,10 +1248,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
                 </button>
                 <button
                   type="submit"
-                  disabled={savingBook}
-                  className="px-5 py-2 font-bold text-white bg-blue-900 hover:bg-blue-950 disabled:opacity-60 rounded shadow-xs"
+                  className="px-5 py-2 font-bold text-white bg-blue-900 hover:bg-blue-950 rounded shadow-xs"
                 >
-                  {savingBook ? 'Saving…' : 'Save Resource'}
+                  Save Resource
                 </button>
               </div>
             </form>
@@ -1149,25 +1259,33 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
       )}
 
       {/* --- MODAL: EDIT STUDENT --- */}
-      {studentModalOpen && editingStudent && (
+      {studentModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs">
           <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto border border-slate-200">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-900 text-white rounded-t-xl">
               <h3 className="font-bold text-sm text-white">Edit Student Record</h3>
-              <button onClick={() => setStudentModalOpen(false)} className="p-1 text-slate-400 hover:text-white rounded">
+              <button
+                onClick={() => setStudentModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-white rounded"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleSaveStudent} className="p-5 space-y-4 text-xs">
               {studentFormError && (
-                <div className="p-2.5 bg-red-50 text-red-700 rounded border border-red-200">{studentFormError}</div>
+                <div className="p-2.5 bg-red-50 text-red-700 rounded border border-red-200">
+                  {studentFormError}
+                </div>
               )}
 
               <div>
-                <label className="font-bold text-slate-700 block mb-1">Username (cannot be changed)</label>
+                <label className="font-bold text-slate-700 block mb-1">
+                  Username (cannot be changed)
+                </label>
                 <input
-                  value={editingStudent.student_id}
+                  name="student_id"
+                  defaultValue={editingStudent?.student_id}
                   readOnly
                   className="w-full p-2 bg-slate-100 border border-slate-200 rounded text-slate-500 font-mono"
                 />
@@ -1177,8 +1295,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
                 <label className="font-bold text-slate-700 block mb-1">Student Full Name *</label>
                 <input
                   name="full_name"
-                  defaultValue={editingStudent.full_name}
+                  defaultValue={editingStudent?.full_name}
                   required
+                  placeholder="e.g. Juan De La Cruz"
                   className="w-full p-2 bg-slate-50 border border-slate-200 rounded text-slate-900"
                 />
               </div>
@@ -1188,7 +1307,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
                   <label className="font-bold text-slate-700 block mb-1">Grade Level *</label>
                   <select
                     name="grade_level"
-                    defaultValue={editingStudent.grade_level}
+                    defaultValue={editingStudent?.grade_level || 'Grade 11'}
                     className="w-full p-2 bg-slate-50 border border-slate-200 rounded text-slate-900"
                   >
                     <option value="Grade 11">Grade 11</option>
@@ -1199,7 +1318,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
                   <label className="font-bold text-slate-700 block mb-1">Strand / Track *</label>
                   <select
                     name="strand"
-                    defaultValue={editingStudent.strand}
+                    defaultValue={editingStudent?.strand || 'STEM'}
                     className="w-full p-2 bg-slate-50 border border-slate-200 rounded text-slate-900"
                   >
                     <option value="STEM">STEM</option>
@@ -1217,8 +1336,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
                   <label className="font-bold text-slate-700 block mb-1">Homeroom Section *</label>
                   <input
                     name="section"
-                    defaultValue={editingStudent.section}
+                    defaultValue={editingStudent?.section || 'St. Jude'}
                     required
+                    placeholder="e.g. Newton"
                     className="w-full p-2 bg-slate-50 border border-slate-200 rounded text-slate-900"
                   />
                 </div>
@@ -1226,7 +1346,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
                   <label className="font-bold text-slate-700 block mb-1">Contact Number</label>
                   <input
                     name="contact_number"
-                    defaultValue={editingStudent.contact_number || ''}
+                    defaultValue={editingStudent?.contact_number || '0917-000-0000'}
                     className="w-full p-2 bg-slate-50 border border-slate-200 rounded text-slate-900"
                   />
                 </div>
@@ -1242,10 +1362,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
                 </button>
                 <button
                   type="submit"
-                  disabled={savingStudent}
-                  className="px-5 py-2 font-bold text-white bg-blue-900 hover:bg-blue-950 disabled:opacity-60 rounded shadow-xs"
+                  className="px-5 py-2 font-bold text-white bg-blue-900 hover:bg-blue-950 rounded shadow-xs"
                 >
-                  {savingStudent ? 'Saving…' : 'Save Student'}
+                  Save Changes
                 </button>
               </div>
             </form>
@@ -1259,14 +1378,19 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
           <div className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-200">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-900 text-white rounded-t-xl">
               <h3 className="font-bold text-sm text-white">Process Walk-In Loan Checkout</h3>
-              <button onClick={() => setWalkinModalOpen(false)} className="p-1 text-slate-400 hover:text-white rounded">
+              <button
+                onClick={() => setWalkinModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-white rounded"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleWalkinCheckout} className="p-5 space-y-4 text-xs">
               {walkinError && (
-                <div className="p-2.5 bg-red-50 text-red-700 rounded border border-red-200">{walkinError}</div>
+                <div className="p-2.5 bg-red-50 text-red-700 rounded border border-red-200">
+                  {walkinError}
+                </div>
               )}
               {walkinSuccess && (
                 <div className="p-2.5 bg-emerald-50 text-emerald-800 rounded border border-emerald-200">
@@ -1275,7 +1399,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
               )}
 
               <div>
-                <label className="font-bold text-slate-700 block mb-1">Select Borrower Student:</label>
+                <label className="font-bold text-slate-700 block mb-1">
+                  Select Borrower Student:
+                </label>
                 <select
                   value={walkinStudentId}
                   onChange={(e) => setWalkinStudentId(e.target.value)}
@@ -1292,7 +1418,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
               </div>
 
               <div>
-                <label className="font-bold text-slate-700 block mb-1">Select Book Resource:</label>
+                <label className="font-bold text-slate-700 block mb-1">
+                  Select Book Resource:
+                </label>
                 <select
                   value={walkinBookId}
                   onChange={(e) => setWalkinBookId(e.target.value)}
@@ -1311,8 +1439,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
               <div className="p-3 bg-blue-50 text-blue-900 rounded text-[11px] space-y-1">
                 <span className="font-semibold block">Loan Terms:</span>
                 <p>• Standard 7 calendar days loan period.</p>
-                <p>• Maximum 3 books per student at one time.</p>
-                <p>• Automatically records the transaction and updates stock in real time.</p>
+                <p>• Librarian desk checkouts are approved immediately and the stock goes down right away.</p>
               </div>
 
               <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
@@ -1325,10 +1452,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
                 </button>
                 <button
                   type="submit"
-                  disabled={walkinBusy}
-                  className="px-5 py-2 font-bold text-white bg-blue-900 hover:bg-blue-950 disabled:opacity-60 rounded shadow-xs"
+                  className="px-5 py-2 font-bold text-white bg-blue-900 hover:bg-blue-950 rounded shadow-xs"
                 >
-                  {walkinBusy ? 'Processing…' : 'Confirm Checkout'}
+                  Confirm Checkout
                 </button>
               </div>
             </form>
