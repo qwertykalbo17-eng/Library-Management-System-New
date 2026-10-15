@@ -2,6 +2,7 @@ import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db, SYSTEM_CURRENT_DATE } from '../db/libraryDatabase';
 import { useLibraryData } from '../db/useLibraryData';
+import { setMyBooksFilter } from '../db/pageFilter';
 import { Book, BorrowingTransaction } from '../types';
 import {
   BookOpen,
@@ -132,7 +133,10 @@ export const StudentDashboardPage: React.FC<StudentDashboardPageProps> = ({
             </p>
           </div>
           <button
-            onClick={() => onNavigate('my-books')}
+            onClick={() => {
+              setMyBooksFilter('overdue');
+              onNavigate('my-books');
+            }}
             className="px-3 py-1.5 text-xs font-bold text-red-700 hover:text-red-900 bg-white border border-red-200 rounded-md transition-colors cursor-pointer shrink-0"
           >
             View Overdue Items
@@ -140,9 +144,16 @@ export const StudentDashboardPage: React.FC<StudentDashboardPageProps> = ({
         </div>
       )}
 
-      {/* Dashboard Statistics Grid (with tabular numerals) */}
+      {/* Dashboard Statistics Grid (each card opens the matching list) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
+        <button
+          type="button"
+          onClick={() => {
+            setMyBooksFilter('all');
+            onNavigate('my-books');
+          }}
+          className="text-left w-full bg-white p-5 rounded-xl border border-slate-200 shadow-xs hover:border-blue-300 hover:shadow-md transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-900"
+        >
           <div className="flex items-center justify-between text-slate-500 text-xs mb-2">
             <span className="font-semibold uppercase tracking-wider text-[11px]">
               Currently Borrowed
@@ -153,9 +164,19 @@ export const StudentDashboardPage: React.FC<StudentDashboardPageProps> = ({
             {metrics.currentlyBorrowed}
           </div>
           <p className="text-[11px] text-slate-400 mt-1">Maximum 3 allowed concurrently</p>
-        </div>
+          <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-blue-900">
+            View books <ArrowRight className="w-3 h-3" />
+          </span>
+        </button>
 
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
+        <button
+          type="button"
+          onClick={() => {
+            setMyBooksFilter('due-soon');
+            onNavigate('my-books');
+          }}
+          className="text-left w-full bg-white p-5 rounded-xl border border-slate-200 shadow-xs hover:border-amber-300 hover:shadow-md transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-900"
+        >
           <div className="flex items-center justify-between text-slate-500 text-xs mb-2">
             <span className="font-semibold uppercase tracking-wider text-[11px]">Due Soon</span>
             <Clock className="w-4 h-4 text-amber-600" />
@@ -164,9 +185,19 @@ export const StudentDashboardPage: React.FC<StudentDashboardPageProps> = ({
             {metrics.dueSoon}
           </div>
           <p className="text-[11px] text-slate-400 mt-1">Due within the next 48 hours</p>
-        </div>
+          <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700">
+            View books <ArrowRight className="w-3 h-3" />
+          </span>
+        </button>
 
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
+        <button
+          type="button"
+          onClick={() => {
+            setMyBooksFilter('overdue');
+            onNavigate('my-books');
+          }}
+          className="text-left w-full bg-white p-5 rounded-xl border border-slate-200 shadow-xs hover:border-red-300 hover:shadow-md transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-900"
+        >
           <div className="flex items-center justify-between text-slate-500 text-xs mb-2">
             <span className="font-semibold uppercase tracking-wider text-[11px]">Overdue Books</span>
             <AlertTriangle className="w-4 h-4 text-red-600" />
@@ -175,9 +206,16 @@ export const StudentDashboardPage: React.FC<StudentDashboardPageProps> = ({
             {metrics.overdue}
           </div>
           <p className="text-[11px] text-slate-400 mt-1">Past scheduled return date</p>
-        </div>
+          <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-red-700">
+            View books <ArrowRight className="w-3 h-3" />
+          </span>
+        </button>
 
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
+        <button
+          type="button"
+          onClick={() => onNavigate('history')}
+          className="text-left w-full bg-white p-5 rounded-xl border border-slate-200 shadow-xs hover:border-emerald-300 hover:shadow-md transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-900"
+        >
           <div className="flex items-center justify-between text-slate-500 text-xs mb-2">
             <span className="font-semibold uppercase tracking-wider text-[11px]">Total Borrowed</span>
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
@@ -186,7 +224,10 @@ export const StudentDashboardPage: React.FC<StudentDashboardPageProps> = ({
             {metrics.totalBorrowed}
           </div>
           <p className="text-[11px] text-slate-400 mt-1">Cumulative checkouts this school year</p>
-        </div>
+          <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
+            View history <ArrowRight className="w-3 h-3" />
+          </span>
+        </button>
       </div>
 
       {/* Quick Actions Navigation Bar */}

@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db, SYSTEM_CURRENT_DATE } from '../db/libraryDatabase';
 import { useLibraryData } from '../db/useLibraryData';
+import { readMyBooksFilter, clearMyBooksFilter, MyBooksFilter } from '../db/pageFilter';
 import { Book, BorrowingTransaction } from '../types';
 import {
   BookOpen,
@@ -9,9 +10,7 @@ import {
   Clock,
   AlertTriangle,
   CheckCircle2,
-  Calendar,
   Search,
-  MapPin,
 } from 'lucide-react';
 
 interface MyBorrowedBooksPageProps {
@@ -24,6 +23,12 @@ export const MyBorrowedBooksPage: React.FC<MyBorrowedBooksPageProps> = ({
   onInitiateReturn,
 }) => {
   const { currentStudent } = useAuth();
+  const [filter, setFilter] = useState<MyBooksFilter>(readMyBooksFilter);
+
+  // The dashboard's choice is used once, then forgotten
+  useEffect(() => {
+    clearMyBooksFilter();
+  }, []);
 
   const { data, loading, error } = useLibraryData(
     async () => {
@@ -50,6 +55,21 @@ export const MyBorrowedBooksPage: React.FC<MyBorrowedBooksPageProps> = ({
   const transactions = data.transactions;
   const allBooks = data.books;
   const activeTransactions = transactions.filter((t) => t.return_date === null);
+  const dueSoonCount = activeTransactions.filter((t) => t.status === 'Due Soon').length;
+  const overdueCount = activeTransactions.filter((t) => t.status === 'Overdue').length;
+
+  const visibleTransactions = activeTransactions.filter((t) => {
+    if (filter === 'due-soon') return t.status === 'Due Soon';
+    if (filter === 'overdue') return t.status === 'Overdue';
+    return true;
+  });
+
+  const filterOptions: { key: MyBooksFilter; label: string; count: number }[] = [
+    { key: 'all', label: 'All Borrowed', count: activeTransactions.length },
+    { key: 'due-soon', label: 'Due Soon', count: dueSoonCount },
+    { key: 'overdue', label: 'Overdue', count: overdueCount },
+  ];
+
   const todayMs = new Date(SYSTEM_CURRENT_DATE).getTime();
 
   return (
@@ -99,22 +119,151 @@ export const MyBorrowedBooksPage: React.FC<MyBorrowedBooksPageProps> = ({
         </div>
       ) : (
         <div className="space-y-4">
-          {/* Desktop Table View */}
-          <div className="hidden md:block bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider font-semibold">
-                <tr>
-                  <th className="py-3 px-4">Book Title & Author</th>
-                  <th className="py-3 px-4">Shelf Location</th>
-                  <th className="py-3 px-4">Borrow Date</th>
-                  <th className="py-3 px-4">Due Date</th>
-                  <th className="py-3 px-4">Days Remaining</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {activeTransactions.map((txn) => {
+          {/* Filter buttons */}
+          <div className="flex flex-wrap items-center gap-2">
+            {filterOptions.map((opt) => (
+              <button
+                key={opt.key}
+                onClick={() => setFilter(opt.key)}
+                className={`px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-colors cursor-pointer ${
+                  filter === opt.key
+                    ? 'bg-blue-900 text-white border-blue-900'
+                    : 'bg-white text-slate-700 border-slate-200 hover:border-blue-300'
+                }`}
+              >
+                {opt.label} ({opt.count})
+              </button>
+            ))}
+          </div>
+
+          {visibleTransactions.length === 0 ? (
+            <div className="bg-white rounded-xl border border-slate-200 p-10 text-center space-y-3">
+              <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto" />
+              <h3 className="text-sm font-bold text-slate-900">
+                {filter === 'overdue' ? 'No overdue books' : 'No books due soon'}
+              </h3>
+              <p className="text-xs text-slate-500">
+                {filter === 'overdue'
+                  ? 'Great news: nothing is past its return date.'
+                  : 'None of your books are due within the next 48 hours.'}
+              </p>
+              <button
+                onClick={() => setFilter('all')}
+                className="px-4 py-2 text-xs font-bold text-blue-900 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors cursor-pointer"
+              >
+                Show all borrowed books
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* Desktop Table View */}
+              <div className="hidden md:block bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider font-semibold">
+                    <tr>
+                      <th className="py-3 px-4">Book Title & Author</th>
+                      <th className="py-3 px-4">Shelf Location</th>
+                      <th className="py-3 px-4">Borrow Date</th>
+                      <th className="py-3 px-4">Due Date</th>
+                      <th className="py-3 px-4">Days Remaining</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {visibleTransactions.map((txn) => {
+                      const book = allBooks.find((b) => b.book_id === txn.book_id);
+                      if (!book) return null;
+
+                      const dueMs = new Date(txn.due_date).getTime();
+                      const diffDays = Math.ceil((dueMs - todayMs) / (1000 * 60 * 60 * 24));
+
+                      return (
+                        <tr key={txn.transaction_id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-4 px-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-14 shrink-0 bg-slate-900 rounded overflow-hidden">
+                                {book.cover_image ? (
+                                  <img
+                                    src={book.cover_image}
+                                    alt={book.title}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center text-[7px] text-amber-300 font-mono">
+                                    {book.shelf_location}
+                                  </div>
+                                )}
+                              </div>
+                              <div>
+                                <span className="font-bold text-slate-900 line-clamp-1">
+                                  {book.title}
+                                </span>
+                                <span className="text-slate-500 block text-[11px]">By {book.author}</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-4 px-4 font-mono text-slate-700">
+                            {book.shelf_location}
+                          </td>
+                          <td className="py-4 px-4 text-slate-600 font-mono">
+                            {txn.borrow_date}
+                          </td>
+                          <td className="py-4 px-4 font-mono font-semibold text-slate-800">
+                            {txn.due_date}
+                          </td>
+                          <td className="py-4 px-4">
+                            {diffDays < 0 ? (
+                              <span className="text-red-700 font-bold tabular-nums">
+                                {Math.abs(diffDays)} day{Math.abs(diffDays) === 1 ? '' : 's'} overdue
+                              </span>
+                            ) : diffDays <= 2 ? (
+                              <span className="text-amber-700 font-bold tabular-nums">
+                                {diffDays} day{diffDays === 1 ? '' : 's'} remaining
+                              </span>
+                            ) : (
+                              <span className="text-emerald-700 font-semibold tabular-nums">
+                                {diffDays} days remaining
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-4 px-4">
+                            {txn.status === 'Overdue' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-red-50 text-red-700 font-bold border border-red-200 text-[11px]">
+                                <AlertTriangle className="w-3.5 h-3.5" />
+                                Overdue
+                              </span>
+                            ) : txn.status === 'Due Soon' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-amber-50 text-amber-800 font-bold border border-amber-200 text-[11px]">
+                                <Clock className="w-3.5 h-3.5" />
+                                Due Soon
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-50 text-emerald-800 font-bold border border-emerald-200 text-[11px]">
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                Borrowed
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-4 px-4 text-right">
+                            <button
+                              onClick={() => onInitiateReturn(txn, book)}
+                              className="px-3 py-1.5 text-xs font-semibold text-blue-900 hover:text-white bg-blue-50 hover:bg-blue-900 rounded-md transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                              <span>Return Book</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Card View */}
+              <div className="md:hidden space-y-4">
+                {visibleTransactions.map((txn) => {
                   const book = allBooks.find((b) => b.book_id === txn.book_id);
                   if (!book) return null;
 
@@ -122,167 +271,77 @@ export const MyBorrowedBooksPage: React.FC<MyBorrowedBooksPageProps> = ({
                   const diffDays = Math.ceil((dueMs - todayMs) / (1000 * 60 * 60 * 24));
 
                   return (
-                    <tr key={txn.transaction_id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-4 px-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-14 shrink-0 bg-slate-900 rounded overflow-hidden">
-                            {book.cover_image ? (
-                              <img
-                                src={book.cover_image}
-                                alt={book.title}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-[7px] text-amber-300 font-mono">
-                                {book.shelf_location}
-                              </div>
-                            )}
-                          </div>
-                          <div>
-                            <span className="font-bold text-slate-900 line-clamp-1">
-                              {book.title}
-                            </span>
-                            <span className="text-slate-500 block text-[11px]">By {book.author}</span>
+                    <div
+                      key={txn.transaction_id}
+                      className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-3"
+                    >
+                      <div className="flex gap-3">
+                        <div className="w-16 h-22 shrink-0 bg-slate-900 rounded overflow-hidden">
+                          {book.cover_image ? (
+                            <img
+                              src={book.cover_image}
+                              alt={book.title}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-[7px] text-amber-300 font-mono">
+                              {book.shelf_location}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-bold text-slate-900 text-sm line-clamp-2">
+                            {book.title}
+                          </h4>
+                          <p className="text-xs text-slate-500">By {book.author}</p>
+                          <div className="mt-1 text-[11px] text-slate-400 font-mono">
+                            Shelf: {book.shelf_location}
                           </div>
                         </div>
-                      </td>
-                      <td className="py-4 px-4 font-mono text-slate-700">
-                        {book.shelf_location}
-                      </td>
-                      <td className="py-4 px-4 text-slate-600 font-mono">
-                        {txn.borrow_date}
-                      </td>
-                      <td className="py-4 px-4 font-mono font-semibold text-slate-800">
-                        {txn.due_date}
-                      </td>
-                      <td className="py-4 px-4">
-                        {diffDays < 0 ? (
-                          <span className="text-red-700 font-bold tabular-nums">
-                            {Math.abs(diffDays)} day{Math.abs(diffDays) === 1 ? '' : 's'} overdue
-                          </span>
-                        ) : diffDays <= 2 ? (
-                          <span className="text-amber-700 font-bold tabular-nums">
-                            {diffDays} day{diffDays === 1 ? '' : 's'} remaining
-                          </span>
-                        ) : (
-                          <span className="text-emerald-700 font-semibold tabular-nums">
-                            {diffDays} days remaining
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-4 px-4">
-                        {txn.status === 'Overdue' ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-red-50 text-red-700 font-bold border border-red-200 text-[11px]">
-                            <AlertTriangle className="w-3.5 h-3.5" />
-                            Overdue
-                          </span>
-                        ) : txn.status === 'Due Soon' ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-amber-50 text-amber-800 font-bold border border-amber-200 text-[11px]">
-                            <Clock className="w-3.5 h-3.5" />
-                            Due Soon
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-50 text-emerald-800 font-bold border border-emerald-200 text-[11px]">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            Borrowed
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-4 px-4 text-right">
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                        <div>
+                          <span className="text-slate-400 text-[10px]">Borrowed</span>
+                          <p className="font-semibold text-slate-800">{txn.borrow_date}</p>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 text-[10px]">Due Date</span>
+                          <p className="font-bold text-slate-900">{txn.due_date}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1">
+                        <div>
+                          {txn.status === 'Overdue' ? (
+                            <span className="text-red-700 font-bold text-xs">
+                              {Math.abs(diffDays)}d Overdue
+                            </span>
+                          ) : txn.status === 'Due Soon' ? (
+                            <span className="text-amber-700 font-bold text-xs">
+                              Due in {diffDays} day{diffDays === 1 ? '' : 's'}
+                            </span>
+                          ) : (
+                            <span className="text-emerald-700 font-semibold text-xs">
+                              {diffDays} days left
+                            </span>
+                          )}
+                        </div>
+
                         <button
                           onClick={() => onInitiateReturn(txn, book)}
-                          className="px-3 py-1.5 text-xs font-semibold text-blue-900 hover:text-white bg-blue-50 hover:bg-blue-900 rounded-md transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                          className="px-4 py-2 text-xs font-bold text-white bg-blue-900 hover:bg-blue-950 rounded-md transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
                         >
-                          <RotateCcw className="w-3 h-3" />
+                          <RotateCcw className="w-3.5 h-3.5" />
                           <span>Return Book</span>
                         </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Mobile Card View */}
-          <div className="md:hidden space-y-4">
-            {activeTransactions.map((txn) => {
-              const book = allBooks.find((b) => b.book_id === txn.book_id);
-              if (!book) return null;
-
-              const dueMs = new Date(txn.due_date).getTime();
-              const diffDays = Math.ceil((dueMs - todayMs) / (1000 * 60 * 60 * 24));
-
-              return (
-                <div
-                  key={txn.transaction_id}
-                  className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-3"
-                >
-                  <div className="flex gap-3">
-                    <div className="w-16 h-22 shrink-0 bg-slate-900 rounded overflow-hidden">
-                      {book.cover_image ? (
-                        <img
-                          src={book.cover_image}
-                          alt={book.title}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-[7px] text-amber-300 font-mono">
-                          {book.shelf_location}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-bold text-slate-900 text-sm line-clamp-2">
-                        {book.title}
-                      </h4>
-                      <p className="text-xs text-slate-500">By {book.author}</p>
-                      <div className="mt-1 text-[11px] text-slate-400 font-mono">
-                        Shelf: {book.shelf_location}
                       </div>
                     </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                    <div>
-                      <span className="text-slate-400 text-[10px]">Borrowed</span>
-                      <p className="font-semibold text-slate-800">{txn.borrow_date}</p>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 text-[10px]">Due Date</span>
-                      <p className="font-bold text-slate-900">{txn.due_date}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-1">
-                    <div>
-                      {txn.status === 'Overdue' ? (
-                        <span className="text-red-700 font-bold text-xs">
-                          {Math.abs(diffDays)}d Overdue
-                        </span>
-                      ) : txn.status === 'Due Soon' ? (
-                        <span className="text-amber-700 font-bold text-xs">
-                          Due in {diffDays} day{diffDays === 1 ? '' : 's'}
-                        </span>
-                      ) : (
-                        <span className="text-emerald-700 font-semibold text-xs">
-                          {diffDays} days left
-                        </span>
-                      )}
-                    </div>
-
-                    <button
-                      onClick={() => onInitiateReturn(txn, book)}
-                      className="px-4 py-2 text-xs font-bold text-white bg-blue-900 hover:bg-blue-950 rounded-md transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      <span>Return Book</span>
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
