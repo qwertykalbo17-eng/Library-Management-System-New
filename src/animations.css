@@ -1,0 +1,168 @@
+/* ================= Intro splash (shown once per browser session) ================= */
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  background: radial-gradient(circle at 50% 40%, #1e3a8a 0%, #020617 70%);
+  animation: splash-out 0.7s ease 1.5s forwards;
+}
+.splash-logo {
+  animation: logo-pop 0.9s cubic-bezier(0.2, 0.9, 0.3, 1.2) both,
+    glow-pulse 1.6s ease-in-out 0.5s infinite;
+}
+.splash-title {
+  text-align: center;
+  color: #fff;
+  animation: fade-up 0.8s ease 0.5s both;
+}
+.splash-bar {
+  width: 140px;
+  height: 3px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+}
+.splash-bar::after {
+  content: '';
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #fbbf24, #60a5fa);
+  transform: translateX(-100%);
+  animation: bar-fill 1.4s ease 0.2s forwards;
+}
+
+/* ================= Hero background ================= */
+.hero-grid {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.09) 1px, transparent 1px);
+  background-size: 26px 26px;
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 30%, transparent 75%);
+  mask-image: radial-gradient(ellipse at center, #000 30%, transparent 75%);
+}
+.blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(70px);
+  opacity: 0.5;
+  pointer-events: none;
+}
+.blob-a {
+  width: 420px;
+  height: 420px;
+  background: #2563eb;
+  top: -140px;
+  left: -90px;
+  animation: blob-drift 14s ease-in-out infinite alternate;
+}
+.blob-b {
+  width: 340px;
+  height: 340px;
+  background: #f59e0b;
+  bottom: -140px;
+  right: 8%;
+  opacity: 0.35;
+  animation: blob-drift 17s ease-in-out infinite alternate-reverse;
+}
+.blob-c {
+  width: 300px;
+  height: 300px;
+  background: #7c3aed;
+  top: 30%;
+  right: -80px;
+  opacity: 0.35;
+  animation: blob-drift 20s ease-in-out infinite alternate;
+}
+
+/* ================= Text + element entrances ================= */
+.word-up {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(0.6em);
+  animation: word-up 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+.anim-up {
+  opacity: 0;
+  animation: fade-up 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+.text-shimmer {
+  background: linear-gradient(100deg, #fbbf24, #fde68a, #60a5fa, #fbbf24);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: word-up 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) forwards, shimmer 6s linear infinite;
+}
+.float-slow {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* ================= Scroll reveal ================= */
+.reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.8s ease, transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.reveal.in-view {
+  opacity: 1;
+  transform: none;
+}
+
+/* ================= Card hover ================= */
+.lift {
+  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+}
+.lift:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 18px 40px -18px rgba(30, 58, 138, 0.4);
+  border-color: #93c5fd;
+}
+
+/* ================= Keyframes ================= */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(22px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes word-up {
+  from { opacity: 0; transform: translateY(0.6em); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes logo-pop {
+  from { opacity: 0; transform: scale(0.4) rotate(-8deg); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes glow-pulse {
+  0%, 100% { filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.35)); }
+  50%      { filter: drop-shadow(0 0 26px rgba(251, 191, 36, 0.75)); }
+}
+@keyframes bar-fill {
+  to { transform: translateX(0); }
+}
+@keyframes splash-out {
+  to { opacity: 0; visibility: hidden; pointer-events: none; }
+}
+@keyframes blob-drift {
+  from { transform: translate(0, 0) scale(1); }
+  to   { transform: translate(60px, 40px) scale(1.15); }
+}
+@keyframes shimmer {
+  from { background-position: 0% 50%; }
+  to   { background-position: 250% 50%; }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-10px); }
+}
+
+/* Respect "reduce motion" settings: show everything immediately */
+@media (prefers-reduced-motion: reduce) {
+  .splash { display: none; }
+  .word-up, .anim-up, .text-shimmer { opacity: 1; transform: none; animation: none; }
+  .text-shimmer { background-position: 0 50%; }
+  .reveal { opacity: 1; transform: none; transition: none; }
+  .blob, .float-slow { animation: none; }
+}
