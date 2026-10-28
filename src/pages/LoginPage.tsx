@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { Lock, User, ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { MMSCLogo } from '../components/MMSCLogo';
 import { Student } from '../types';
+import { PasswordInput } from '../components/PasswordInput';
 
 interface LoginPageProps {
   initialMode?: 'student' | 'admin';
@@ -273,11 +274,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ initialMode = 'student', o
               <label className={labelClass}>Password</label>
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="password"
+                <PasswordInput
                   value={form.password}
                   onChange={(e) => setField('password', e.target.value)}
                   placeholder="At least 6 characters"
+                  autoComplete="new-password"
                   className={iconInputClass}
                 />
               </div>
@@ -287,11 +288,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ initialMode = 'student', o
               <label className={labelClass}>Confirm Password</label>
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="password"
+                <PasswordInput
                   value={form.confirm_password}
                   onChange={(e) => setField('confirm_password', e.target.value)}
                   placeholder="Re-enter your password"
+                  autoComplete="new-password"
                   className={iconInputClass}
                 />
               </div>
@@ -350,11 +351,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ initialMode = 'student', o
               </div>
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="password"
+                <PasswordInput
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your confidential password"
+                  autoComplete="current-password"
                   className={iconInputClass}
                 />
               </div>
