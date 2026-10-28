@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Lock, User, ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { User, ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { MMSCLogo } from '../components/MMSCLogo';
 import { Student } from '../types';
 import { PasswordInput } from '../components/PasswordInput';
