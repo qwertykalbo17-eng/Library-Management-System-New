@@ -3,7 +3,7 @@
 // MAINTENANCE_MODE:  true  = the website shows the maintenance screen to everyone
 //                    false = the website works normally
 // ============================================================
-export const MAINTENANCE_MODE = true;
+export const MAINTENANCE_MODE = false;
 
 // Text shown on the maintenance screen (change as needed)
 export const MAINTENANCE_MESSAGE =
