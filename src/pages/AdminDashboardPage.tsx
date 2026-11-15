@@ -1084,6 +1084,8 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
 
       {/* --- TAB 6: SETTINGS & DATA RESET --- */}
       {activeTab === 'settings' && (
+        <div className="space-y-6">
+        <AdminAccountsPanel />
         <div className="bg-white p-6 sm:p-8 rounded-xl border border-slate-200 shadow-xs space-y-6 max-w-2xl">
           <div className="border-b border-slate-100 pb-4">
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -1098,9 +1100,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
           <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 space-y-2">
             <span className="font-bold block">Data storage</span>
             <p className="leading-relaxed">
-              Books, students, loans and notifications are saved online. The old "reset to sample data" tool was removed because it could erase real circulation records. To clear test data, use the Supabase Table Editor.
+                            Books, students, loans and notifications are saved online. The old "reset to sample data" tool was removed because it could erase real circulation records. To clear test data, use the Supabase Table Editor.
             </p>
           </div>
+        </div>
         </div>
       )}
 
