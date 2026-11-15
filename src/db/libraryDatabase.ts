@@ -220,6 +220,28 @@ class LibraryDatabase {
     return { success: true, message: 'Book deleted successfully from library catalog.' };
   }
 
+    public async isHeadAdmin(): Promise<boolean> {
+    const { data } = await supabase.rpc('is_head_admin');
+    return data === true;
+  }
+
+  public async createAdminAccount(username: string, fullName: string, password: string) {
+    const { error } = await supabase.rpc('create_admin_account', {
+      p_username: username,
+      p_full_name: fullName,
+      p_password: password,
+    });
+    return error ? { success: false, message: error.message } : { success: true, message: 'Admin account created.' };
+  }
+
+  public async resetStudentPassword(username: string, password: string) {
+    const { error } = await supabase.rpc('reset_student_password', {
+      p_username: username,
+      p_password: password,
+    });
+    return error ? { success: false, message: error.message } : { success: true, message: 'Password updated.' };
+  }
+
   // --- STUDENTS ---
   /** Librarians get everyone; a student only gets their own record. */
   public async getStudents(): Promise<Student[]> {
