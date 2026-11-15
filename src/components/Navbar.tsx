@@ -190,7 +190,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     : 'hover:text-slate-900 hover:bg-slate-50'
                 }`}
               >
-                Search Catalog
+                Library Catalog
               </button>
               <button
                 onClick={() => onNavigate('my-books')}
@@ -492,7 +492,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 }}
                 className="w-full text-left px-3 py-2 rounded-md text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
-                Search Catalog
+                Library Catalog
               </button>
               <button
                 onClick={() => {
