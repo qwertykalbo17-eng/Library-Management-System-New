@@ -542,7 +542,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
               : 'border-transparent hover:text-slate-900'
           }`}
         >
-          Research & Analytics Overview
+          Library Statistics
         </button>
         <button
           onClick={() => setActiveTab('books')}
@@ -610,7 +610,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                  Borrowing Distribution by Senior High Strand
+                  Borrowing Trends by Senior High Strand
                 </h3>
                 <TrendingUp className="w-4 h-4 text-blue-900" />
               </div>
@@ -649,7 +649,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                  Top Circulated Learning Resources
+                  Most Borrowed Learning Resources
                 </h3>
                 <BookOpen className="w-4 h-4 text-amber-600" />
               </div>
