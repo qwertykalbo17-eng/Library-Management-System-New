@@ -1,4 +1,4 @@
-// Dark mode: adds a toggle button and recolors the existing pages when dark.
+
 const STORAGE_KEY = 'library:theme';
 
 const rules: string[] = [];
@@ -11,7 +11,6 @@ const text = (cls: string, color: string) =>
 const border = (cls: string, color: string) =>
   rules.push(`html.dark [class~="border-${cls}"]{border-color:${color}}`);
 
-// Surfaces
 bg('bg-white', '#131c31');
 ['95', '90', '80'].forEach((n) => bg(`bg-white/${n}`, `rgba(19,28,49,0.${n})`));
 bg('bg-slate-50', '#182238');
@@ -29,7 +28,6 @@ bg('bg-amber-100', 'rgba(245,158,11,0.22)');
 bg('bg-red-50', 'rgba(239,68,68,0.14)');
 bg('bg-red-100', 'rgba(239,68,68,0.22)');
 
-// Hover surfaces
 hoverBg('bg-white', '#1a2540');
 hoverBg('bg-slate-50', '#1f2b45');
 hoverBg('bg-slate-50/80', '#1f2b45');
@@ -39,7 +37,6 @@ hoverBg('bg-blue-50', 'rgba(59,130,246,0.22)');
 hoverBg('bg-blue-100', 'rgba(59,130,246,0.3)');
 hoverBg('bg-red-50', 'rgba(239,68,68,0.22)');
 
-// Text
 ['slate-900', 'slate-800'].forEach((c) => text(c, '#f1f5f9'));
 text('slate-700', '#e2e8f0');
 text('slate-600', '#cbd5e1');
@@ -50,7 +47,6 @@ text('slate-400', '#8a9bb4');
 ['amber-900', 'amber-800', 'amber-700', 'amber-600'].forEach((c) => text(c, '#fcd34d'));
 ['red-900', 'red-800', 'red-700', 'red-600'].forEach((c) => text(c, '#fca5a5'));
 
-// Borders
 border('slate-100', '#1e2a42');
 border('slate-200', '#2a3752');
 border('slate-300', '#3b4a68');
@@ -63,11 +59,9 @@ border('red-300', 'rgba(248,113,113,0.5)');
 rules.push('html.dark [class~="divide-slate-100"] > *{border-color:#1e2a42}');
 rules.push('html.dark [class~="divide-slate-200"] > *{border-color:#2a3752}');
 
-// Keep white text white on hover, and dark text on yellow buttons
 rules.push('html.dark [class~="hover:text-white"]:hover{color:#ffffff}');
 rules.push('html.dark [class~="bg-amber-400"],html.dark [class~="bg-amber-300"]{color:#0f172a}');
 
-// Page + form fields
 rules.push('html.dark{color-scheme:dark}');
 rules.push('html.dark body{background-color:#0b1220;color:#e2e8f0}');
 rules.push('html.dark #root > [class~="min-h-screen"]{background-color:#0b1220}');
@@ -75,7 +69,6 @@ rules.push('html.dark input,html.dark select,html.dark textarea{color:#f1f5f9}')
 rules.push('html.dark input::placeholder,html.dark textarea::placeholder{color:#64748b}');
 rules.push('html.dark option{background-color:#131c31;color:#f1f5f9}');
 
-// Toggle button
 rules.push(
   '#theme-toggle{position:fixed;right:16px;bottom:16px;z-index:9999;width:44px;height:44px;border-radius:9999px;border:1px solid #cbd5e1;background:#ffffff;color:#0f172a;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,0.18);cursor:pointer}',
   '#theme-toggle:hover{transform:scale(1.06)}',
@@ -99,7 +92,6 @@ const save = (dark: boolean) => {
   try {
     localStorage.setItem(STORAGE_KEY, dark ? 'dark' : 'light');
   } catch {
-    /* storage unavailable: the choice just won't be remembered */
   }
 };
 
@@ -116,7 +108,6 @@ const style = document.createElement('style');
 style.textContent = rules.join('\n');
 document.head.appendChild(style);
 
-// Apply the saved choice right away so the page doesn't flash white
 apply(readSaved());
 
 const mountButton = () => {

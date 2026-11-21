@@ -582,18 +582,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
               : 'border-transparent hover:text-slate-900'
           }`}
         >
-          Borrowing & Circulation Ledger ({transactions.length})
+          Borrowing History ({transactions.length})
         </button>
-        <button
-          onClick={() => setActiveTab('reports')}
-          className={`pb-3 px-3 transition-colors border-b-2 whitespace-nowrap cursor-pointer ${
-            activeTab === 'reports'
-              ? 'border-blue-900 text-blue-900 font-bold'
-              : 'border-transparent hover:text-slate-900'
-          }`}
-        >
-          Reports & Statistics
-        </button>
+
         <button
           onClick={() => setActiveTab('settings')}
           className={`pb-3 px-3 transition-colors border-b-2 whitespace-nowrap cursor-pointer ${
