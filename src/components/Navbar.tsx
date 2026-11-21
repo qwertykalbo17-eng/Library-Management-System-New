@@ -235,7 +235,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     : 'hover:text-slate-900 hover:bg-slate-50'
                 }`}
               >
-                Admin Overview
+                Admin Dashboard
               </button>
               <button
                 onClick={() => onNavigate('catalog')}
@@ -542,7 +542,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 }}
                 className="w-full text-left px-3 py-2 rounded-md text-sm font-medium text-slate-700"
               >
-                Admin Overview
+                Admin Dashboard
               </button>
               <button
                 onClick={() => {
